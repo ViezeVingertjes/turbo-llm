@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320">
+<title>Turbo LLM</title>
+<rect x="0.5" y="0.5" width="1279" height="319" rx="14" fill="#0f1218" stroke="#262c36"/>
+<text x="640" y="163" font-family="ui-monospace,SFMono-Regular,'DejaVu Sans Mono',Menlo,Consolas,monospace" font-size="96" font-weight="700" fill="#e6edf3" text-anchor="middle">Turbo<tspan fill="#0ca30c">LLM</tspan></text>
+<text x="640" y="219" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="34" fill="#9aa4b2" text-anchor="middle">Llama 3.2 1B on a CPU</text>
+</svg>

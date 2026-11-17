@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="248" viewBox="0 0 880 248" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+<title>Decode speed relative to llama.cpp bf16, same CPU</title>
+<rect x="0.5" y="0.5" width="879" height="247" rx="12" fill="#0f1218" stroke="#262c36"/>
+<text x="32" y="44" fill="#e6edf3" font-size="20" font-weight="600">Decode speed vs llama.cpp, same CPU</text>
+<text x="848" y="71" fill="#9aa4b2" font-size="13" text-anchor="end">matches fp32</text>
+<line x1="336" y1="86" x2="336" y2="220" stroke="#232833" stroke-width="1"/>
+<text x="336" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">1x</text>
+<line x1="510" y1="86" x2="510" y2="220" stroke="#232833" stroke-width="1"/>
+<text x="510" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">2x</text>
+<line x1="684" y1="86" x2="684" y2="220" stroke="#232833" stroke-width="1"/>
+<text x="684" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">3x</text>
+<text x="150" y="107" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp</text>
+<path d="M162,92H332Q336,92,336,96V108Q336,112,332,112H162Z" fill="#3987e5"/>
+<text x="344" y="107" fill="#e6edf3" font-size="14" font-weight="600">1.00x</text>
+<text x="848" y="107" fill="#9aa4b2" font-size="14" text-anchor="end">16/18</text>
+<text x="150" y="141" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp + draft</text>
+<path d="M162,126H405.1Q409.1,126,409.1,130V142Q409.1,146,405.1,146H162Z" fill="#3987e5"/>
+<text x="417.1" y="141" fill="#e6edf3" font-size="14" font-weight="600">1.42x</text>
+<text x="848" y="141" fill="#9aa4b2" font-size="14" text-anchor="end">15/18</text>
+<text x="150" y="175" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM</text>
+<path d="M162,160H422.5Q426.5,160,426.5,164V176Q426.5,180,422.5,180H162Z" fill="#0ca30c"/>
+<text x="434.5" y="175" fill="#e6edf3" font-size="14" font-weight="600">1.52x</text>
+<text x="848" y="175" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
+<text x="150" y="209" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM + draft</text>
+<path d="M162,194H706.1Q710.1,194,710.1,198V210Q710.1,214,706.1,214H162Z" fill="#0ca30c"/>
+<text x="718.1" y="209" fill="#e6edf3" font-size="14" font-weight="600">3.15x</text>
+<text x="848" y="209" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
+<line x1="162" y1="86" x2="162" y2="220" stroke="#9aa4b2" stroke-width="1"/>
+</svg>
