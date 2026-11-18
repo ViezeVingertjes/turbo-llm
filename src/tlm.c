@@ -15,8 +15,10 @@
 #include <time.h>
 #include <unistd.h>
 
-// Model dimensions. T: max context; MB: max tokens per forward pass (prompt batches, draft verification).
+// Model dimensions. T: max context; MB: max tokens per draft-verification pass; PB: tokens per prompt chunk (64: the
+// fastest of 32/64/128 for the prompt kernel, tools/gemmbench.c).
 enum { D = 2048, NL = 16, NH = 32, HD = 64, KV = 512, QKV = D + 2 * KV, F = 8192, V = 128256, T = 8192, MB = 8 };
+enum { PB = 64 };
 enum { MAXT = 64 };           // max threads
 enum { PCAP = T - 2 * MB };   // max prompt tokens: leaves room for drafts and the final tokens
 // Special tokens: ids >= SPECIAL are never printed. Generation ends at the model's end tokens (generation_config's
@@ -113,7 +115,7 @@ static inline float hsum(__m256 v) {
 
 // 12-bit row segment (bytes p..e) times G <= 4 tokens (x_b = x + b * C) sharing each decoded block, accumulated into
 // a[b]. Every token uses the same 2 accumulators in the same order regardless of G, batch size or tiling, so batched
-// (prompt, verification) results are bitwise identical to unbatched ones.
+// (verification) results are bitwise identical to unbatched ones.
 static inline __attribute__((always_inline)) void part(const uint8_t *p, const uint8_t *e, __m256i lut,
                                                        const float *x, uint32_t C, __m256 a[][2], int G) {
   __m256 w[8];
@@ -167,6 +169,32 @@ static inline __attribute__((always_inline)) void coarse(const uint8_t *p, uint3
     for (int b = 0; b < G; b++) tot[b] = _mm256_fmadd_ps(_mm256_add_ps(in[b][0], in[b][1]), s, tot[b]);
   }
   for (int b = 0; b < G; b++) out[b * ostride] = hsum(tot[b]);
+}
+
+// Prompt kernel: RB rows of decoded weights (w, row stride TC) times VB groups of 8 tokens (packed x: group v, column
+// c at x + v * vs + 8 * c) over SC columns, added to s[i * PB / 8 + v]. Lanes are tokens, weights are broadcast: 12
+// accumulators + 3 x vectors + 1 weight = the 16 ymm registers, and 7 loads per 12 FMAs (the decode kernel needs 2
+// accumulators per (row, token), so it reuses each load only 2-3 times). Each (row, token) sums its SC columns in one
+// FMA chain from 0, then adds that to its total: the order is fixed by the columns alone, so a prompt token's result
+// depends neither on the other tokens of its chunk nor on how the prompt is split. It differs from the decode kernel's
+// by rounding (outputs stay token-identical, make verify); chains of SC keep the error at the decode kernel's level
+// (one chain over all columns had 3-4x its logit error against the fp32 reference).
+// SC = 128: a sub-block's packed x (VB * 8 tokens x SC columns, 12 KB) stays in L1 with its 4 KB of weights.
+enum { RB = 4, VB = 3, SC = 128 };
+static inline __attribute__((always_inline)) void pk(const float *w, const float *x, size_t vs, __m256 *s, int V) {
+  __m256 a[RB][VB];
+  for (int i = 0; i < RB; i++)
+    for (int v = 0; v < V; v++) a[i][v] = _mm256_setzero_ps();
+  for (int c = 0; c < SC; c++) {
+    __m256 xv[VB];
+    for (int v = 0; v < V; v++) xv[v] = _mm256_load_ps(x + v * vs + 8 * c);
+    for (int i = 0; i < RB; i++) {
+      const __m256 wb = _mm256_broadcast_ss(w + i * TC + c);
+      for (int v = 0; v < V; v++) a[i][v] = _mm256_fmadd_ps(wb, xv[v], a[i][v]);
+    }
+  }
+  for (int i = 0; i < RB; i++)
+    for (int v = 0; v < V; v++) s[i * PB / 8 + v] = _mm256_add_ps(s[i * PB / 8 + v], a[i][v]);
 }
 
 // ---- Spinning thread pool: run(f, a) calls f(t, a) on threads t = 0..NT-1 (0 = the caller) and waits ----------------
@@ -238,9 +266,63 @@ static float silu(float x) { return x / (1.0f + expf(-x)); }
 #define G_SWITCH(CALL) \
   switch (nb - b) { case 1: CALL(1); break; case 2: CALL(2); break; case 3: CALL(3); break; default: CALL(4); }
 
+// Prompt chunks' input, packed for pk(): PX[(v * C + c) * 8 + l] = x[(8v + l) * C + c], zero past the nb tokens.
+static _Alignas(64) float PX[PB * F];
+
 // y[b * rows + r] = W x_b. With glu: glu[b * rows/2 + i] = silu(y[2i]) * y[2i + 1] (gate/up rows interleaved).
-// Each thread owns a contiguous range of rows (whole TR-row blocks, keeping gate/up pairs together).
-typedef struct { const Mat *m; const float *x; float *y; int nb; float *glu; } MM;
+// Each thread owns a contiguous range of rows (whole TR-row blocks, keeping gate/up pairs together). prompt: 12-bit
+// matrices use the prompt kernel (pk) on PX.
+typedef struct { const Mat *m; const float *x; float *y; int nb; float *glu; int prompt; } MM;
+
+static void pack_job(int t, void *arg) {  // x -> PX, each thread its own columns, 8 at a time
+  const MM *a = arg;
+  uint32_t C = a->m->cols, c0 = (uint64_t)C / 8 * t / NT * 8, c1 = (uint64_t)C / 8 * (t + 1) / NT * 8;
+  for (int v = 0; v < (a->nb + 7) / 8; v++)
+    for (uint32_t c = c0; c < c1; c += 8)
+      for (int l = 0; l < 8; l++) {
+        float w[8] = {0};
+        if (8 * v + l < a->nb) memcpy(w, a->x + (size_t)(8 * v + l) * C + c, sizeof w);
+        for (int j = 0; j < 8; j++) PX[((size_t)v * C + c + j) * 8 + l] = w[j];
+      }
+}
+
+// Prompt kernel on the TR rows r.. for nb tokens of PX: each TR x TC tile decoded once into fp32, then pk() over
+// SC-column sub-blocks; the rows' escaped weights are added to the accumulators (8 tokens per FMA), then go to y.
+static void prompt_rows(const Mat *m, uint32_t r, float *y, int nb) {
+  static _Thread_local _Alignas(64) float ws[TR * TC];
+  static _Thread_local _Alignas(64) __m256 st[TR][PB / 8];
+  uint32_t R = m->rows, C = m->cols;
+  int nv = (nb + 7) / 8;
+  const uint8_t *p = m->w + r * row12(C);
+  __m256 w[8];
+  memset(st, 0, sizeof st);
+  for (uint32_t c = 0; c < C; c += TC) {
+    for (int i = 0; i < TR; i++)
+      for (int j = 0; j < TC; j += BW, p += B12) {
+        dec(p, m->lut, w);
+        for (int k = 0; k < 8; k++) _mm256_store_ps(ws + i * TC + j + 8 * k, w[k]);
+      }
+    for (int s = 0; s < TC; s += SC)
+      for (int v = 0; v < nv; v += VB)
+        for (int i = 0; i < TR; i += RB) {
+          const float *wi = ws + i * TC + s, *xv = PX + ((size_t)v * C + c + s) * 8;
+          switch (nv - v) {
+            case 1: pk(wi, xv, (size_t)C * 8, &st[i][v], 1); break;
+            case 2: pk(wi, xv, (size_t)C * 8, &st[i][v], 2); break;
+            default: pk(wi, xv, (size_t)C * 8, &st[i][v], VB);
+          }
+        }
+  }
+  for (uint32_t e = first_exc(m, r * C); e < m->ne && m->ei[e] < (r + TR) * C; e++) {
+    const __m256 ev = _mm256_set1_ps(m->ev[e]);
+    __m256 *o = st[m->ei[e] / C - r];
+    const float *xc = PX + (size_t)(m->ei[e] % C) * 8;
+    for (int v = 0; v < nv; v++) o[v] = _mm256_fmadd_ps(ev, _mm256_load_ps(xc + (size_t)v * C * 8), o[v]);
+  }
+  for (int i = 0; i < TR; i++)
+    for (int b = 0; b < nb; b++) y[b * R + r + i] = ((const float *)st[i])[b];
+}
+
 static void mm_job(int t, void *arg) {
   const MM *a = arg;
   const Mat *m = a->m;
@@ -256,7 +338,8 @@ static void mm_job(int t, void *arg) {
 #define Q5(G) coarse(p, C, x + b * C, y + b * R + r, R, G)
       G_SWITCH(Q5)
     }
-  for (uint32_t r = r0; r < r1 && !m->q5; r += TR)  // 12-bit: one TR-row block of tiles at a time
+  for (uint32_t r = r0; r < r1 && a->prompt; r += TR) prompt_rows(m, r, y, nb);
+  for (uint32_t r = r0; r < r1 && !m->q5 && !a->prompt; r += TR)  // 12-bit: one TR-row block of tiles at a time
     for (int b = 0; b < nb; b += 4) {
       __m256 acc[TR][4][2] = {0};
       const uint8_t *p = m->w + r * row12(C);
@@ -269,15 +352,16 @@ static void mm_job(int t, void *arg) {
         for (int g = 0; g < nb - b && g < 4; g++)
           y[(b + g) * R + r + i] = hsum(_mm256_add_ps(acc[i][g][0], acc[i][g][1]));
     }
-  for (uint32_t i = first_exc(m, r0 * C); i < m->ne && m->ei[i] < r1 * C; i++)  // escaped weights of these rows
+  for (uint32_t i = first_exc(m, r0 * C); !a->prompt && i < m->ne && m->ei[i] < r1 * C; i++)  // escaped weights
     for (int b = 0; b < nb; b++) y[b * R + m->ei[i] / C] += m->ev[i] * x[b * C + m->ei[i] % C];
   if (glu)
     for (int b = 0; b < nb; b++)
       for (uint32_t r = r0; r < r1; r += 2) glu[b * R / 2 + r / 2] = silu(y[b * R + r]) * y[b * R + r + 1];
 }
 
-static void mm(const Mat *m, const float *x, float *y, int nb, float *glu) {
-  MM a = {m, x, y, nb, glu};
+static void mm(const Mat *m, const float *x, float *y, int nb, float *glu, int prompt) {
+  MM a = {m, x, y, nb, glu, prompt && !m->q5};
+  if (a.prompt) run(pack_job, &a);
   run(mm_job, &a);
 }
 
@@ -293,11 +377,11 @@ static const float *HW;       // per row: ||w_hat|| (1 + 1e-6)
 static int has_draft;
 static const int CAPTURE[3] = {2, 8, 13};  // EAGLE-3 low/mid/high features: hidden states entering these layers
 // activations, KV cache, draft features: cache-line aligned, so no 32-byte vector load crosses a line
-static _Alignas(64) float X[MB * D], XN[MB * D], Q[MB * QKV], AO[MB * D], GU[MB * 2 * F], HB[MB * F], LG[MB * V];
+static _Alignas(64) float X[PB * D], XN[PB * D], Q[PB * QKV], AO[PB * D], GU[PB * 2 * F], HB[PB * F], LG[MB * V];
 // KV cache per KV head, each contiguous over positions (one stream per head); TK = T + MB: a draft chain runs ahead
 enum { KVH = KV / HD, QPK = NH / KVH, TK = T + MB };  // KV heads, query heads per KV head, cache slots
 _Static_assert(QPK % 2 == 0, "attn() accumulates the values of two query heads at a time");
-static _Alignas(64) float KC[NL][KVH][TK][HD], VC[NL][KVH][TK][HD], H3[MB * 3 * D];
+static _Alignas(64) float KC[NL][KVH][TK][HD], VC[NL][KVH][TK][HD], H3[PB * 3 * D];
 
 static void embed(int tok, float *o) {
   __m256 w[8];
@@ -490,7 +574,7 @@ static void attn(int t, void *arg) {  // one (token, KV head) per task: its QPK 
   const AT *a = arg;
   static _Thread_local float att[QPK][TK];
   for (int bg = t; bg < a->nb * KVH; bg += NT) {
-    int b = bg / KVH, g = bg % KVH, d = depth(a->par, b), n = a->pos + d + 1, sl[MB];
+    int b = bg / KVH, g = bg % KVH, d = depth(a->par, b), n = a->pos + d + 1, sl[PB];
     for (int i = b, k = d; k >= 0; i = a->par ? a->par[i] : i - 1, k--) sl[k] = a->pos + i;  // ancestor slots
 #define SLOT(j) ((j) < a->pos ? (j) : sl[(j) - a->pos])
     const float *q0 = Q + b * QKV + g * QPK * HD;
@@ -530,12 +614,13 @@ static void attn(int t, void *arg) {  // one (token, KV head) per task: its QPK 
 }
 
 // One Llama layer on the residual stream X for nb tree nodes at positions pos..: attention, then the SwiGLU MLP.
-// xin: the qkv input if it is not rmsnorm(X, g1) (the draft layer has its own 2D-wide input).
+// xin: the qkv input if it is not rmsnorm(X, g1) (the draft layer has its own 2D-wide input). A pass without a tree
+// (par == 0) is a prompt chunk: its matrices use the prompt kernel.
 static void layer(const Mat *wqkv, const Mat *wo, const Mat *w13, const Mat *w2, const float *g1, const float *g2,
                   float (*kc)[TK][HD], float (*vc)[TK][HD], int nb, int pos, const float *xin, const int *par) {
   if (!xin)
     for (int b = 0; b < nb; b++) rmsnorm(XN + b * D, X + b * D, g1);
-  mm(wqkv, xin ? xin : XN, Q, nb, 0);
+  mm(wqkv, xin ? xin : XN, Q, nb, 0, !par);
   for (int b = 0; b < nb; b++) {
     float *q = Q + b * QKV, cs[HD];
     rope_tab(pos + depth(par, b), cs);
@@ -548,11 +633,11 @@ static void layer(const Mat *wqkv, const Mat *wo, const Mat *w13, const Mat *w2,
   }
   AT at = {nb, pos, kc, vc, par};
   run(attn, &at);
-  mm(wo, AO, XN, nb, 0);
+  mm(wo, AO, XN, nb, 0, !par);
   for (int i = 0; i < nb * D; i++) X[i] += XN[i];
   for (int b = 0; b < nb; b++) rmsnorm(XN + b * D, X + b * D, g2);
-  mm(w13, XN, GU, nb, HB);
-  mm(w2, HB, XN, nb, 0);
+  mm(w13, XN, GU, nb, HB, !par);
+  mm(w2, HB, XN, nb, 0, !par);
   for (int i = 0; i < nb * D; i++) X[i] += XN[i];
 }
 
@@ -612,7 +697,7 @@ static void dhead_job(int t, void *x) {
 // X. Unless p == 0 (cache filling only), returns the draft token after the last pair with its draft probability *p,
 // and the runner-up *t2 with *p2.
 static int dstep(const int *tok, int nb, int pos, float *p, int *t2, float *p2) {
-  static _Alignas(64) float in[MB * 2 * D];
+  static _Alignas(64) float in[PB * 2 * D];
   for (int b = 0; b < nb; b++) {
     embed(tok[b], XN + b * D);  // XN as scratch
     rmsnorm(in + 2 * D * b, XN + b * D, DR.n_in);
@@ -648,7 +733,7 @@ static int drafts(const int *next, int nb, int pos, int K, int *d, int *par) {
   float pr[2 * MB], chain = 1, p, p2;  // candidate 2k: chain token at depth k; 2k + 1: runner-up at depth k
   int tk[2 * MB], sel[2 * MB] = {0}, node[MB], L = 0, n = 0;
   if (!has_draft) return 0;
-  mm(&DR.fc, H3, X, nb, 0);  // fused features straight into the residual stream
+  mm(&DR.fc, H3, X, nb, 0, 0);  // fused features straight into the residual stream
   if (!K) {                  // prompt chunks: only fill the draft's cache
     dstep(next, nb, pos, 0, 0, 0);
     return 0;
@@ -852,13 +937,14 @@ static int chat_prompt(const char *user, int *ctx) {
 // has one, else prompt lookup) and emits the accepted ones plus the model's own next token. Returns the new length m;
 // *passes counts forward passes after the prompt. The prompt is processed from position `from` on: a caller that keeps
 // ctx and extends it (multi-turn) passes the m - 1 of the previous call, as the cache then holds ctx[0..m - 1). The
-// result equals that of from = 0, since prefill does not depend on how the prompt is split into batches.
+// prompt kernel does not depend on how the prompt is split, but the cache's reply rows came from decode passes, which
+// round differently: the result is token-identical to that of from = 0 (tui's check), not bitwise.
 static int generate(int *ctx, int n, int from, int maxn, int K, void (*emit)(int), int *passes) {
-  int np = n, a[MB], tok = 0, dr[MB], dpar[MB], ndr = 0, next[MB];
+  int np = n, a[PB], tok = 0, dr[MB], dpar[MB], ndr = 0, next[PB];
   K = K < 0 ? 0 : K > MB - 1 ? MB - 1 : K;  // a pass verifies at most MB tokens
   from = from < 0 ? 0 : from > np - 1 ? np - 1 : from;  // at least the last prompt token yields the first logits
-  for (int i = from; i < np; i += MB) {                 // the prompt, in batches
-    int nb = np - i < MB ? np - i : MB;
+  for (int i = from; i < np; i += PB) {                 // the prompt, in chunks
+    int nb = np - i < PB ? np - i : PB;
     forward(ctx + i, nb, i, a, 0, i + nb == np);
     tok = a[nb - 1];
     for (int b = 0; b < nb; b++) next[b] = i + b + 1 < np ? ctx[i + b + 1] : tok;

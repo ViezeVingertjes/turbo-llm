@@ -131,9 +131,24 @@ exact argmax over all 128,256 rows, including feature vectors built to make the 
 
 Each forward pass checks a small tree of guessed tokens at once and keeps the longest prefix the model agrees
 with, plus the model's own next token. That only preserves the output if checking a token inside a batch gives
-bitwise the same logits as computing it alone, so every kernel sums in the same order whatever the batch size, and
+bitwise the same logits as computing it alone, so the decode kernel sums in the same order whatever the batch size, and
 a tree node attends to the context and then to its ancestors in sequence order. Batched, tree and one-at-a-time
 results are bitwise identical; a bad guess costs time, never correctness.
+
+</details>
+
+<details>
+<summary><b>Prompt processing</b>: 64-token chunks through a kernel built for many tokens at once</summary>
+
+Prompts run in chunks of 64 tokens. Each tile of 8 rows by 512 columns is decoded once per chunk, and a kernel
+whose vector lanes are 8 tokens (4 rows by 24 tokens per step, weights broadcast) needs 7 memory loads per 12
+multiply-adds. The decode kernel's summation order would allow only 2 rows by 3 tokens in AVX2's 16 registers,
+13% slower. This makes prompt processing about 1.28x faster than running the prompt through the decode kernel
+in 8-token batches.
+
+Each prompt token's sums depend only on the columns, never on which chunk the token is in, so splitting a prompt
+differently gives bitwise the same result. The prompt kernel adds in a different order from the decode kernel, so
+the two differ by fp32 rounding, at the same distance from the fp32 reference; the output tokens are the same.
 
 </details>
 
