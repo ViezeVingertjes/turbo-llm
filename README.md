@@ -50,7 +50,7 @@ about 2.3 GB of free memory.
 ## Results
 
 <p align="center">
-  <img src="media/speed.svg" alt="Speed relative to llama.cpp bf16 on the same CPU, decode and end-to-end (prompt included), same bf16 weights and the same draft head: llama.cpp 1.00x and 1.00x (16 of 18 outputs match fp32), llama.cpp with the draft head 1.42x and 1.31x (15/18), llama.cpp Q8_0 with the draft head 1.92x and 1.61x (8/18), Turbo LLM without drafting 1.52x and 1.60x (18/18), Turbo LLM with the draft head 3.15x and 2.92x (18/18)" width="100%">
+  <img src="media/speed.svg" alt="Speed relative to llama.cpp bf16 on the same CPU with the same bf16 weights, decode and end-to-end (prompt included): llama.cpp 1.00x and 1.00x (16 of 18 outputs match fp32), llama.cpp with the same draft head 1.42x and 1.31x (15/18), Turbo LLM without drafting 1.52x and 1.60x (18/18), Turbo LLM with the draft head 3.15x and 2.92x (18/18)" width="100%">
 </p>
 
 All numbers here are independent of the hardware, except the speed ratios, which were measured on one machine
