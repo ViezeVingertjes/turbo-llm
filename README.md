@@ -72,19 +72,21 @@ Memory read per generated token, the quantity that sets the speed on a bandwidth
 | Turbo LLM, EAGLE-3 draft head | 1.63 GB + up to 0.22 GB of draft head | 2.64 | 0.62-0.70 GB |
 
 Speed relative to llama.cpp: same machine, Spec-Bench dev subset (18 questions, up to 1,024 new tokens), both given
-the same prompts as identical token ids, llama.cpp release b12470 at its best thread count and default settings:
+the same prompts as token ids, llama.cpp release b12470 at its best thread count and default settings (Turbo LLM's
+current version was measured a day later, so its prompts differ from llama.cpp's only in the date token of the
+system header):
 
 | Compared with | Decode speed | End-to-end | llama.cpp output identical to the exact one |
 |---|---|---|---|
-| llama.cpp, bf16 | 3.15x | 2.54x | 16 of 18 |
-| llama.cpp, bf16 + the same EAGLE-3 draft head | 2.21x | 1.93x | 15 of 18 |
-| llama.cpp, Q8_0 (lossy) + the same draft head, its fastest setup | 1.64x | 1.58x | 8 of 18 |
+| llama.cpp, bf16 | 3.15x | 2.92x | 16 of 18 |
+| llama.cpp, bf16 + the same EAGLE-3 draft head | 2.21x | 2.22x | 15 of 18 |
+| llama.cpp, Q8_0 (lossy) + the same draft head, its fastest setup | 1.64x | 1.81x | 8 of 18 |
 
-Without any drafting, Turbo LLM decodes 1.52x faster than llama.cpp in bf16. llama.cpp's bf16 output also shows why
+Without any drafting, Turbo LLM decodes 1.52x faster than llama.cpp in bf16 (1.60x end-to-end). llama.cpp's bf16 output also shows why
 "same weights" is not "same output": it differs from the exact result on 2 of 18 prompts, and on a third once
 speculative decoding batches the computation.
 
-Peak memory is 2.13 GB with the draft head, plus 64 KB per token of context.
+Peak memory is 2.14 GB with the draft head, plus 64 KB per token of context.
 
 ## How it works
 
