@@ -1,29 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="248" viewBox="0 0 880 248" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
-<title>Decode speed relative to llama.cpp bf16, same CPU</title>
-<rect x="0.5" y="0.5" width="879" height="247" rx="12" fill="#0f1218" stroke="#262c36"/>
-<text x="32" y="44" fill="#e6edf3" font-size="20" font-weight="600">Decode speed vs llama.cpp, same CPU</text>
-<text x="848" y="71" fill="#9aa4b2" font-size="13" text-anchor="end">matches fp32</text>
-<line x1="336" y1="86" x2="336" y2="220" stroke="#232833" stroke-width="1"/>
-<text x="336" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">1x</text>
-<line x1="510" y1="86" x2="510" y2="220" stroke="#232833" stroke-width="1"/>
-<text x="510" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">2x</text>
-<line x1="684" y1="86" x2="684" y2="220" stroke="#232833" stroke-width="1"/>
-<text x="684" y="238" fill="#9aa4b2" font-size="12" text-anchor="middle">3x</text>
-<text x="150" y="107" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp</text>
-<path d="M162,92H332Q336,92,336,96V108Q336,112,332,112H162Z" fill="#3987e5"/>
-<text x="344" y="107" fill="#e6edf3" font-size="14" font-weight="600">1.00x</text>
-<text x="848" y="107" fill="#9aa4b2" font-size="14" text-anchor="end">16/18</text>
-<text x="150" y="141" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp + draft</text>
-<path d="M162,126H405.1Q409.1,126,409.1,130V142Q409.1,146,405.1,146H162Z" fill="#3987e5"/>
-<text x="417.1" y="141" fill="#e6edf3" font-size="14" font-weight="600">1.42x</text>
-<text x="848" y="141" fill="#9aa4b2" font-size="14" text-anchor="end">15/18</text>
-<text x="150" y="175" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM</text>
-<path d="M162,160H422.5Q426.5,160,426.5,164V176Q426.5,180,422.5,180H162Z" fill="#0ca30c"/>
-<text x="434.5" y="175" fill="#e6edf3" font-size="14" font-weight="600">1.52x</text>
-<text x="848" y="175" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
-<text x="150" y="209" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM + draft</text>
-<path d="M162,194H706.1Q710.1,194,710.1,198V210Q710.1,214,706.1,214H162Z" fill="#0ca30c"/>
-<text x="718.1" y="209" fill="#e6edf3" font-size="14" font-weight="600">3.15x</text>
-<text x="848" y="209" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
-<line x1="162" y1="86" x2="162" y2="220" stroke="#9aa4b2" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="336" viewBox="0 0 880 336" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+<title>Decode and end-to-end speed relative to llama.cpp bf16, same CPU</title>
+<rect x="0.5" y="0.5" width="879" height="335" rx="12" fill="#0f1218" stroke="#262c36"/>
+<text x="32" y="44" fill="#e6edf3" font-size="20" font-weight="600">Speed vs llama.cpp bf16, same CPU</text>
+<rect x="32" y="62" width="12" height="12" rx="2" fill="#9aa4b2"/>
+<text x="50" y="72" fill="#9aa4b2" font-size="13">decode</text>
+<rect x="112" y="62" width="12" height="12" rx="2" fill="#9aa4b2" fill-opacity="0.45"/>
+<text x="130" y="72" fill="#9aa4b2" font-size="13">end-to-end (prompt included)</text>
+<text x="848" y="72" fill="#9aa4b2" font-size="13" text-anchor="end">matches fp32</text>
+<line x1="374" y1="86" x2="374" y2="296" stroke="#232833" stroke-width="1"/>
+<text x="374" y="314" fill="#9aa4b2" font-size="12" text-anchor="middle">1x</text>
+<line x1="548" y1="86" x2="548" y2="296" stroke="#232833" stroke-width="1"/>
+<text x="548" y="314" fill="#9aa4b2" font-size="12" text-anchor="middle">2x</text>
+<line x1="722" y1="86" x2="722" y2="296" stroke="#232833" stroke-width="1"/>
+<text x="722" y="314" fill="#9aa4b2" font-size="12" text-anchor="middle">3x</text>
+<text x="188" y="111" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp</text>
+<path d="M200,92H370.0Q374.0,92,374.0,96V101Q374.0,105,370.0,105H200Z" fill="#3987e5"/>
+<text x="382.0" y="103" fill="#e6edf3" font-size="12">1.00x</text>
+<path d="M200,107H370.0Q374.0,107,374.0,111V116Q374.0,120,370.0,120H200Z" fill="#3987e5" fill-opacity="0.45"/>
+<text x="382.0" y="118" fill="#e6edf3" font-size="12">1.00x</text>
+<text x="848" y="111" fill="#9aa4b2" font-size="14" text-anchor="end">16/18</text>
+<text x="188" y="153" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp + draft</text>
+<path d="M200,134H443.7Q447.7,134,447.7,138V143Q447.7,147,443.7,147H200Z" fill="#3987e5"/>
+<text x="455.7" y="145" fill="#e6edf3" font-size="12">1.42x</text>
+<path d="M200,149H424.8Q428.8,149,428.8,153V158Q428.8,162,424.8,162H200Z" fill="#3987e5" fill-opacity="0.45"/>
+<text x="436.8" y="160" fill="#e6edf3" font-size="12">1.31x</text>
+<text x="848" y="153" fill="#9aa4b2" font-size="14" text-anchor="end">15/18</text>
+<text x="188" y="195" fill="#e6edf3" font-size="14" text-anchor="end">llama.cpp Q8_0 + draft</text>
+<path d="M200,176H530.5Q534.5,176,534.5,180V185Q534.5,189,530.5,189H200Z" fill="#3987e5"/>
+<text x="542.5" y="187" fill="#e6edf3" font-size="12">1.92x</text>
+<path d="M200,191H476.6Q480.6,191,480.6,195V200Q480.6,204,476.6,204H200Z" fill="#3987e5" fill-opacity="0.45"/>
+<text x="488.6" y="202" fill="#e6edf3" font-size="12">1.61x</text>
+<text x="848" y="195" fill="#9aa4b2" font-size="14" text-anchor="end">8/18</text>
+<text x="188" y="237" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM</text>
+<path d="M200,218H460.7Q464.7,218,464.7,222V227Q464.7,231,460.7,231H200Z" fill="#0ca30c"/>
+<text x="472.7" y="229" fill="#e6edf3" font-size="12" font-weight="600">1.52x</text>
+<path d="M200,233H475.0Q479.0,233,479.0,237V242Q479.0,246,475.0,246H200Z" fill="#0ca30c" fill-opacity="0.45"/>
+<text x="487.0" y="244" fill="#e6edf3" font-size="12" font-weight="600">1.60x</text>
+<text x="848" y="237" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
+<text x="188" y="279" fill="#e6edf3" font-size="14" text-anchor="end" font-weight="600">Turbo LLM + draft</text>
+<path d="M200,260H744.0Q748.0,260,748.0,264V269Q748.0,273,744.0,273H200Z" fill="#0ca30c"/>
+<text x="756.0" y="271" fill="#e6edf3" font-size="12" font-weight="600">3.15x</text>
+<path d="M200,275H703.6Q707.6,275,707.6,279V284Q707.6,288,703.6,288H200Z" fill="#0ca30c" fill-opacity="0.45"/>
+<text x="715.6" y="286" fill="#e6edf3" font-size="12" font-weight="600">2.92x</text>
+<text x="848" y="279" fill="#e6edf3" font-size="14" text-anchor="end">18/18</text>
+<line x1="200" y1="86" x2="200" y2="296" stroke="#9aa4b2" stroke-width="1"/>
 </svg>
