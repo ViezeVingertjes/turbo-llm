@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 // Model dimensions. T: max context; MB: max tokens per draft-verification pass; PB: tokens per prompt chunk (64: the
-// fastest of 32/64/128 for the prompt kernel, tools/gemmbench.c).
+// fastest of 32/64/128 for the prompt kernel).
 enum { D = 2048, NL = 16, NH = 32, HD = 64, KV = 512, QKV = D + 2 * KV, F = 8192, V = 128256, T = 8192, MB = 8 };
 enum { PB = 64 };
 enum { MAXT = 64 };           // max threads
@@ -177,7 +177,7 @@ static inline __attribute__((always_inline)) void coarse(const uint8_t *p, uint3
 // accumulators per (row, token), so it reuses each load only 2-3 times). Each (row, token) sums its SC columns in one
 // FMA chain from 0, then adds that to its total: the order is fixed by the columns alone, so a prompt token's result
 // depends neither on the other tokens of its chunk nor on how the prompt is split. It differs from the decode kernel's
-// by rounding (outputs stay token-identical, make verify); chains of SC keep the error at the decode kernel's level
+// by rounding (outputs stay token-identical to fp32); chains of SC keep the error at the decode kernel's level
 // (one chain over all columns had 3-4x its logit error against the fp32 reference).
 // SC = 128: a sub-block's packed x (VB * 8 tokens x SC columns, 12 KB) stays in L1 with its 4 KB of weights.
 enum { RB = 4, VB = 3, SC = 128 };
@@ -938,7 +938,7 @@ static int chat_prompt(const char *user, int *ctx) {
 // *passes counts forward passes after the prompt. The prompt is processed from position `from` on: a caller that keeps
 // ctx and extends it (multi-turn) passes the m - 1 of the previous call, as the cache then holds ctx[0..m - 1). The
 // prompt kernel does not depend on how the prompt is split, but the cache's reply rows came from decode passes, which
-// round differently: the result is token-identical to that of from = 0 (tui's check), not bitwise.
+// round differently: the result is token-identical to that of from = 0, not bitwise.
 static int generate(int *ctx, int n, int from, int maxn, int K, void (*emit)(int), int *passes) {
   int np = n, a[PB], tok = 0, dr[MB], dpar[MB], ndr = 0, next[PB];
   K = K < 0 ? 0 : K > MB - 1 ? MB - 1 : K;  // a pass verifies at most MB tokens

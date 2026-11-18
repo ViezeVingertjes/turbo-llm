@@ -80,7 +80,6 @@ system header):
 |---|---|---|---|
 | llama.cpp, bf16 | 3.15x | 2.92x | 16 of 18 |
 | llama.cpp, bf16 + the same EAGLE-3 draft head | 2.21x | 2.22x | 15 of 18 |
-| llama.cpp, Q8_0 (lossy) + the same draft head, its fastest setup | 1.64x | 1.81x | 8 of 18 |
 
 Without any drafting, Turbo LLM decodes 1.52x faster than llama.cpp in bf16 (1.60x end-to-end). llama.cpp's bf16 output also shows why
 "same weights" is not "same output": it differs from the exact result on 2 of 18 prompts, and on a third once
